@@ -1,6 +1,7 @@
 //! Низкоуровневые привязки к OpenCL API
 
 use super::types::*;
+use std::ffi::c_void;
 
 #[link(name = "OpenCL")]
 unsafe extern "C" {
@@ -30,8 +31,8 @@ unsafe extern "C" {
         properties: *const cl_context_properties,
         num_devices: u32,
         devices: *const cl_device_id,
-        pfn_notify: *mut std::ffi::c_void,
-        user_data: *mut std::ffi::c_void,
+        pfn_notify: Option<extern "C" fn()>,
+        user_data: *mut c_void,
         errcode_ret: *mut cl_int
     ) -> cl_context;
 
@@ -55,15 +56,15 @@ unsafe extern "C" {
         num_devices: u32,
         device_list: *const cl_device_id,
         options: *const i8,
-        pfn_notify: *mut std::ffi::c_void,
-        user_data: *mut std::ffi::c_void
+        pfn_notify: Option<extern "C" fn()>,
+        user_data: *mut c_void
     ) -> cl_int;
 
     pub fn clCreateBuffer(
         context: cl_context,
         flags: cl_mem_flags,
         size: usize,
-        host_ptr: *mut std::ffi::c_void,
+        host_ptr: *mut c_void,
         errcode_ret: *mut cl_int
     ) -> cl_mem;
 
@@ -77,7 +78,7 @@ unsafe extern "C" {
         kernel: cl_kernel,
         arg_index: u32,
         arg_size: usize,
-        arg_value: *const std::ffi::c_void
+        arg_value: *const c_void
     ) -> cl_int;
 
     pub fn clEnqueueNDRangeKernel(
@@ -98,7 +99,19 @@ unsafe extern "C" {
         blocking_read: bool,
         offset: usize,
         size: usize,
-        ptr: *mut std::ffi::c_void,
+        ptr: *mut c_void,
+        num_events_in_wait_list: u32,
+        event_wait_list: *const cl_event,
+        event: *mut cl_event
+    ) -> cl_int;
+
+    pub fn clEnqueueWriteBuffer(
+        command_queue: cl_command_queue,
+        buffer: cl_mem,
+        blocking_write: bool,
+        offset: usize,
+        size: usize,
+        ptr: *const c_void,
         num_events_in_wait_list: u32,
         event_wait_list: *const cl_event,
         event: *mut cl_event
@@ -116,7 +129,15 @@ unsafe extern "C" {
         device: cl_device_id,
         param_name: cl_program_build_info,
         param_value_size: usize,
-        param_value: *mut std::ffi::c_void,
+        param_value: *mut c_void,
+        param_value_size_ret: *mut usize
+    ) -> cl_int;
+
+    pub fn clGetDeviceInfo(
+        device: cl_device_id,
+        param_name: cl_device_info,
+        param_value_size: usize,
+        param_value: *mut c_void,
         param_value_size_ret: *mut usize
     ) -> cl_int;
 } 

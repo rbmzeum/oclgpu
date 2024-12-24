@@ -6,3 +6,16 @@ description = "OpenCL-accelerated matrix operations and neural networks"
 
 [dependencies]
 rand = "0.8"
+safetensors = "0.4"
+reqwest = { version = "0.11", features = ["blocking"] }
+anyhow = "1.0"
+tokenizers = "0.15"
+tokio = { version = "1.0", features = ["full"] }
+
+[[bin]]
+name = "matrix_multiply"
+path = "src/bin/matrix_multiply.rs"
+
+[[bin]]
+name = "load_model"
+path = "src/bin/load_model.rs"

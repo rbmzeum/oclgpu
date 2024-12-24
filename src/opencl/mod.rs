@@ -4,5 +4,8 @@
 
 pub mod bindings;
 pub mod types;
-// pub mod context;
-// pub mod kernel; 
+pub mod utils;
+
+pub use utils::*;
+// Реэкспортируем макросы из корня крейта
+pub use crate::{cl_check, cl_create}; 

@@ -85,10 +85,18 @@ impl E5Model {
         let tensors = SafeTensors::deserialize(&model_data)
             .context("Не удалось десериализовать модель")?;
 
-        // Получаем эмбеддинги
+        // Выводим доступные тензоры для отладки
+        println!("Доступные тензоры в модели:");
+        for tensor_name in tensors.names() {
+            println!("- {}", tensor_name);
+        }
+
+        // Получаем эмбеддинги (используем правильный путь для E5)
         let embeddings_tensor = tensors
-            .tensor("encoder.embeddings.word_embeddings.weight")
-            .context("Не найдены word embeddings")?;
+            .tensor("embeddings.word_embeddings.weight")  // Изменили путь к тензору
+            .or_else(|_| tensors.tensor("model.embeddings.word_embeddings.weight"))  // Альтернативный путь
+            .or_else(|_| tensors.tensor("e5.embeddings.word_embeddings.weight"))  // Еще один вариант
+            .context("Не найдены word embeddings. Проверьте структуру модели.")?;
 
         let embeddings_data = unsafe {
             std::slice::from_raw_parts(

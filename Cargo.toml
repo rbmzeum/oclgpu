@@ -1,7 +1,8 @@
 [package]
-name = "oclgpu"
+name = "opencl_neural"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "OpenCL-accelerated matrix operations and neural networks"
 
 [dependencies]
-rand = "0.8.5"
+rand = "0.8"

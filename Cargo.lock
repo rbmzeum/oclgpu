@@ -989,6 +989,7 @@ name = "opencl_neural"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "indicatif",
  "rand",
  "reqwest",
  "safetensors",

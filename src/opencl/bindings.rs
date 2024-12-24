@@ -3,6 +3,19 @@
 use super::types::*;
 use std::ffi::c_void;
 
+// Определяем тип для callback-функции
+type ContextCallback = Option<
+    unsafe extern "C" fn(
+        errinfo: *const i8,
+        private_info: *const c_void,
+        cb: usize,
+        user_data: *mut c_void,
+    )
+>;
+
+// Определяем тип для callback-функции программы
+type ProgramCallback = Option<extern "C" fn()>;
+
 #[link(name = "OpenCL")]
 unsafe extern "C" {
     pub fn clGetPlatformIDs(
@@ -31,7 +44,7 @@ unsafe extern "C" {
         properties: *const cl_context_properties,
         num_devices: u32,
         devices: *const cl_device_id,
-        pfn_notify: Option<extern "C" fn()>,
+        pfn_notify: ContextCallback,
         user_data: *mut c_void,
         errcode_ret: *mut cl_int
     ) -> cl_context;
@@ -56,7 +69,7 @@ unsafe extern "C" {
         num_devices: u32,
         device_list: *const cl_device_id,
         options: *const i8,
-        pfn_notify: Option<extern "C" fn()>,
+        pfn_notify: ProgramCallback,
         user_data: *mut c_void
     ) -> cl_int;
 

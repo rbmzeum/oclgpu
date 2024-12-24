@@ -1,3 +1,7 @@
 /target
 /tmp
 model.safetensors
+tokenizer.json
+e5_large_multilingual.safetensors
+e5_tokenizer.json
+

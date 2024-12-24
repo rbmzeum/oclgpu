@@ -1,5 +1,6 @@
 //! Пример использования библиотеки
 
+use anyhow::Result;
 use opencl_neural::{
     matrix::{
         MatrixType,
@@ -11,11 +12,16 @@ use opencl_neural::{
     opencl::{types::*, bindings::*},
     utils::measure_time,
 };
+use std::ptr;
+
+// Импортируем макросы напрямую
+use opencl_neural::{cl_check, cl_create};
+use opencl_neural::opencl::{bindings, types};
 
 const MATRIX_SIZE: usize = 1024;
 const WORK_GROUP_SIZE: usize = 16;
 
-fn main() {
+fn main() -> Result<()> {
     unsafe {
         // Выбор типа матриц
         let matrix_type = MatrixType::Random;
@@ -25,96 +31,44 @@ fn main() {
         println!("Размер рабочей группы: {}x{}", WORK_GROUP_SIZE, WORK_GROUP_SIZE);
         println!("\nИнициализация OpenCL...");
 
-        // Инициализация OpenCL с обработкой ошибок
-        let mut num_platforms = 0u32;
-        let mut status = clGetPlatformIDs(0, std::ptr::null_mut(), &mut num_platforms);
-        if status != 0 {
-            println!("Ошибка при получении количества платформ OpenCL: {}", status);
-            return;
-        }
-
-        println!("Найдено платформ OpenCL: {}", num_platforms);
-
-        if num_platforms == 0 {
-            println!("Не найдено платформ OpenCL");
-            return;
-        }
-
-        let mut platforms = vec![std::ptr::null_mut(); num_platforms as usize];
-        status = clGetPlatformIDs(num_platforms, platforms.as_mut_ptr(), &mut num_platforms);
-        if status != 0 {
-            println!("Ошибка при получении списка платформ OpenCL: {}", status);
-            return;
-        }
-
-        let mut selected_platform = None;
-        let mut selected_device = std::ptr::null_mut();
-
-        println!("\nПоиск GPU устройства...");
-
-        // Поиск GPU устройства
-        'platform_loop: for platform in platforms.iter() {
-            let mut num_devices = 0u32;
-            status = clGetDeviceIDs(*platform, CL_DEVICE_TYPE_GPU, 0, std::ptr::null_mut(), &mut num_devices);
-            if status == 0 && num_devices > 0 {
-                let mut devices = vec![std::ptr::null_mut(); num_devices as usize];
-                status = clGetDeviceIDs(*platform, CL_DEVICE_TYPE_GPU, num_devices, devices.as_mut_ptr(), &mut num_devices);
-                if status == 0 {
-                    selected_platform = Some(*platform);
-                    selected_device = devices[0];
-                    println!("Найдено GPU устройство");
-                    break 'platform_loop;
-                }
-            }
-        }
-
-        // Если GPU не найден, пробуем CPU
-        if selected_platform.is_none() {
-            println!("GPU устройство не найдено, пробуем CPU");
-            for platform in platforms.iter() {
-                let mut num_devices = 0u32;
-                status = clGetDeviceIDs(*platform, CL_DEVICE_TYPE_CPU, 0, std::ptr::null_mut(), &mut num_devices);
-                if status == 0 && num_devices > 0 {
-                    let mut devices = vec![std::ptr::null_mut(); num_devices as usize];
-                    status = clGetDeviceIDs(*platform, CL_DEVICE_TYPE_CPU, num_devices, devices.as_mut_ptr(), &mut num_devices);
-                    if status == 0 {
-                        selected_platform = Some(*platform);
-                        selected_device = devices[0];
-                        println!("Найдено CPU устройство");
-                        break;
-                    }
-                }
-            }
-        }
-
-        if selected_platform.is_none() {
-            println!("Не найдено подходящих OpenCL устройств");
-            return;
-        }
-
-        println!("\nСоздание контекста OpenCL...");
+        // Инициализация OpenCL
+        let mut platform_ids = vec![ptr::null_mut(); 1];
+        let mut num_platforms = 0;
         
-        // Создание контекста
-        let mut err = 0;
-        let context = clCreateContext(
-            std::ptr::null(),
+        cl_check!(clGetPlatformIDs(1, platform_ids.as_mut_ptr(), &mut num_platforms))?;
+        
+        let platform = platform_ids[0];
+        
+        // Поиск GPU устройства
+        let mut device_ids = vec![ptr::null_mut(); 1];
+        let mut num_devices = 0;
+        
+        cl_check!(clGetDeviceIDs(
+            platform,
+            CL_DEVICE_TYPE_GPU,
             1,
-            &selected_device,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            &mut err
-        );
-        if err != 0 {
-            println!("Ошибка при создании контекста OpenCL: {}", err);
-            return;
-        }
+            device_ids.as_mut_ptr(),
+            &mut num_devices
+        ))?;
+        
+        let device = device_ids[0];
+
+        // Создаем контекст через макрос cl_create!
+        let context = cl_create!(clCreateContext(
+            ptr::null(),
+            1,
+            &device,
+            None,
+            ptr::null_mut(),
+            &mut 0
+        ))?;
 
         println!("Создание очереди команд...");
-        let command_queue = clCreateCommandQueue(context, selected_device, 0, &mut err);
-        if err != 0 {
-            println!("Ошибка при создании очереди команд: {}", err);
+        let command_queue = clCreateCommandQueue(context, device, 0, &mut 0);
+        if 0 != 0 {
+            println!("Ошибка при создании очереди команд: {}", 0);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при создании очереди команд"));
         }
 
         println!("\nКомпиляция OpenCL программы...");
@@ -127,21 +81,21 @@ fn main() {
             1,
             &source,
             &source_len,
-            &mut err
+            &mut 0
         );
-        if err != 0 {
-            println!("Ошибка при создании программы: {}", err);
+        if 0 != 0 {
+            println!("Ошибка при создании программы: {}", 0);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при создании программы"));
         }
 
         let build_status = clBuildProgram(
             program,
             1,
-            &selected_device,
+            &device,
             std::ptr::null(),
-            std::ptr::null_mut(),
+            None,
             std::ptr::null_mut()
         );
 
@@ -150,7 +104,7 @@ fn main() {
             let mut log_size: usize = 0;
             clGetProgramBuildInfo(
                 program,
-                selected_device,
+                device,
                 CL_PROGRAM_BUILD_LOG,
                 0,
                 std::ptr::null_mut(),
@@ -160,7 +114,7 @@ fn main() {
             let mut build_log = vec![0u8; log_size];
             clGetProgramBuildInfo(
                 program,
-                selected_device,
+                device,
                 CL_PROGRAM_BUILD_LOG,
                 log_size,
                 build_log.as_mut_ptr() as *mut std::ffi::c_void,
@@ -173,21 +127,21 @@ fn main() {
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при компиляции программы"));
         }
 
         println!("Создание ядра OpenCL...");
         let kernel = clCreateKernel(
             program,
             "matrix_multiply\0".as_ptr() as *const i8,
-            &mut err
+            &mut 0
         );
-        if err != 0 {
-            println!("Ошибка при создании ядра: {}", err);
+        if 0 != 0 {
+            println!("Ошибка при создании ядра: {}", 0);
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при создании ядра"));
         }
 
         // Проверка размеров матриц
@@ -197,7 +151,7 @@ fn main() {
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Размер матрицы должен быть кратен 4"));
         }
 
         println!("\nПодготовка данных для умножения матриц...");
@@ -242,15 +196,15 @@ fn main() {
             CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR | CL_MEM_ALLOC_HOST_PTR,
             matrix_elements * std::mem::size_of::<f64>(),
             a.as_mut_ptr() as *mut std::ffi::c_void,
-            &mut err
+            &mut 0
         );
-        if err != 0 {
-            println!("Ошибка при создании буфера A: {}", err);
+        if 0 != 0 {
+            println!("Ошибка при создании буфера A: {}", 0);
             clReleaseKernel(kernel);
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при создании буфера A"));
         }
 
         let b_buffer = clCreateBuffer(
@@ -258,16 +212,16 @@ fn main() {
             CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR | CL_MEM_ALLOC_HOST_PTR,
             matrix_elements * std::mem::size_of::<f64>(),
             b.as_mut_ptr() as *mut std::ffi::c_void,
-            &mut err
+            &mut 0
         );
-        if err != 0 {
-            println!("Ошибка при создании буфера B: {}", err);
+        if 0 != 0 {
+            println!("Ошибка при создании буфера B: {}", 0);
             clReleaseMemObject(a_buffer);
             clReleaseKernel(kernel);
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при создании буфера B"));
         }
 
         let c_buffer = clCreateBuffer(
@@ -275,17 +229,17 @@ fn main() {
             CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR,
             matrix_elements * std::mem::size_of::<f64>(),
             std::ptr::null_mut(),
-            &mut err
+            &mut 0
         );
-        if err != 0 {
-            println!("Ошибка при создании буфера C: {}", err);
+        if 0 != 0 {
+            println!("Ошибка при создании буфера C: {}", 0);
             clReleaseMemObject(b_buffer);
             clReleaseMemObject(a_buffer);
             clReleaseKernel(kernel);
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при создании буфера C"));
         }
 
         println!("Установка аргументов ядра...");
@@ -308,7 +262,7 @@ fn main() {
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при установке аргументов ядра"));
         }
 
         println!("\nЗапуск вычислений на GPU...");
@@ -338,7 +292,7 @@ fn main() {
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при запуске ядра"));
         }
 
         println!("Ожидание завершения GPU вычислений...");
@@ -355,7 +309,7 @@ fn main() {
             clReleaseProgram(program);
             clReleaseCommandQueue(command_queue);
             clReleaseContext(context);
-            return;
+            return Err(anyhow::Error::msg("Ошибка при ожидании завершения"));
         }
 
         println!("Чтение результатов GPU...");
@@ -414,6 +368,7 @@ fn main() {
         clReleaseCommandQueue(command_queue);
         clReleaseContext(context);
         println!("Программа завершена.");
+
+        Ok(())
     }
 }
-

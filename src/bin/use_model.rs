@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 use tokenizers::Tokenizer;
 use opencl_neural::neural::GpuEmbeddings;
+use std::fmt::Write;
 
 const MODEL_PATH: &str = "model.safetensors";
 const TOKENIZER_URL: &str = "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json";
@@ -144,8 +145,50 @@ fn get_tokenizer() -> Result<Tokenizer> {
         .map_err(|e| anyhow!("Не удалось загрузить токенизатор из файла: {}", e))
 }
 
+/// Тестовые примеры для BERT токенизатора
+const TEST_CASES: &[&str] = &[
+    "Hello world",
+    "Machine learning is fascinating",
+    "OpenCL GPU acceleration",
+    "BERT embeddings test case",
+    "[CLS] Special tokens [SEP]",
+    "Тест юникода и спецсимволов !@#$%",
+    "Multi-word hyphenated-text example",
+    "Short",
+    "This is a much longer sentence that should test the tokenizer's ability to handle sequences of varying length and complexity",
+];
+
+fn run_tokenizer_tests(model: &BertModel, tokenizer: &Tokenizer) -> Result<()> {
+    println!("\nЗапуск тестов токенизатора BERT:");
+    println!("================================");
+
+    for (i, &test_case) in TEST_CASES.iter().enumerate() {
+        println!("\nТест #{}", i + 1);
+        println!("Входной текст: {}", test_case);
+
+        // Токенизация
+        let encoding = tokenizer.encode(test_case, true)
+            .map_err(|e| anyhow!("Ошибка токенизации: {}", e))?;
+
+        let tokens = encoding.get_tokens();
+        let ids = encoding.get_ids();
+
+        println!("Токены: {:?}", tokens);
+        println!("ID токенов: {:?}", ids);
+
+        // Получаем эмбеддинги через GPU
+        let gpu_embeddings = model.forward_gpu(ids)?;
+
+        // Статистика
+        println!("Количество токенов: {}", tokens.len());
+        println!("Размер эмбеддингов: {} байт", gpu_embeddings.len() * 4);
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
-    println!("Демонстрация использования BERT модели\n");
+    println!("Тестирование BERT токенизатора и эмбеддингов\n");
 
     // Загружаем токенизатор
     let tokenizer = get_tokenizer()?;
@@ -158,6 +201,13 @@ fn main() -> Result<()> {
         .context("Не удалось десериализовать модель")?;
     
     let model = BertModel::from_safetensors(&tensors)?;
+
+    // Запускаем тесты
+    run_tokenizer_tests(&model, &tokenizer)?;
+
+    // Прогрев GPU и тесты производительности
+    println!("\nТесты производительности:");
+    println!("========================");
 
     // Создадим более длинный текст для лучшего сравнения
     let text = "Hello, I love machine learning! Neural networks are fascinating \

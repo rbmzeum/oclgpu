@@ -124,23 +124,41 @@ impl E5Model {
             true
         ).map_err(|e| anyhow::anyhow!("Ошибка токенизации: {}", e))?;
 
-        // Получаем эмбеддинги через GPU
-        self.embeddings.forward(encoding.get_ids())
-    }
+        // Получаем эмбеддинги через GPU для каждого токена
+        let token_embeddings = self.embeddings.forward(encoding.get_ids())?;
+        
+        // Преобразуем в матрицу [num_tokens x embedding_dim]
+        let num_tokens = encoding.get_ids().len();
+        let token_matrix: Vec<Vec<f32>> = token_embeddings
+            .chunks(EMBEDDING_DIM)
+            .map(|chunk| chunk.to_vec())
+            .collect();
 
-    /// Вычисляет косинусную близость между векторами
-    fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-        let mut dot_product = 0.0;
-        let mut norm_a = 0.0;
-        let mut norm_b = 0.0;
-
-        for i in 0..a.len() {
-            dot_product += a[i] * b[i];
-            norm_a += a[i] * a[i];
-            norm_b += b[i] * b[i];
+        // Выполняем average pooling по всем токенам
+        let mut pooled_embedding = vec![0.0; EMBEDDING_DIM];
+        for token_vector in token_matrix.iter() {
+            for (i, &value) in token_vector.iter().enumerate() {
+                pooled_embedding[i] += value;
+            }
+        }
+        
+        // Делим на количество токенов для усреднения
+        for value in pooled_embedding.iter_mut() {
+            *value /= num_tokens as f32;
         }
 
-        dot_product / (norm_a.sqrt() * norm_b.sqrt())
+        // L2 нормализация
+        let mut norm = 0.0;
+        for &x in pooled_embedding.iter() {
+            norm += x * x;
+        }
+        norm = norm.sqrt();
+        
+        let normalized = pooled_embedding.iter()
+            .map(|&x| x / norm)
+            .collect();
+
+        Ok(normalized)
     }
 }
 
@@ -148,7 +166,6 @@ fn main() -> Result<()> {
     println!("Инициализация E5 multilingual модели...");
     let model = E5Model::new()?;
 
-    // Тестовые примеры на разных языках
     let test_texts = [
         "Искусственный интеллект становится важной частью нашей жизни",
         "Machine learning is transforming the world",
@@ -164,24 +181,30 @@ fn main() -> Result<()> {
         println!("\nТекст {}: {}", i + 1, text);
         
         let embedding = model.encode(text)?;
-        println!("Размер эмбеддинга: {} элементов", embedding.len());
-        println!("Первые 5 значений: {:?}", &embedding[..5]);
+        println!("Размер вектора: {}", embedding.len());
+        
+        // Компактный вывод вектора
+        print!("Вектор: [");
+        for (j, &value) in embedding.iter().enumerate() {
+            if j < 10 || j > embedding.len() - 5 {
+                // Выводим первые 10 и последние 4 значения
+                print!("{:.3}", value);
+                if j < embedding.len() - 1 {
+                    print!(", ");
+                }
+            } else if j == 10 {
+                print!("..., ");
+            }
+        }
+        println!("]");
+        
+        // Статистика по вектору
+        let min = embedding.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+        let max = embedding.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let mean = embedding.iter().sum::<f32>() / embedding.len() as f32;
+        println!("Статистика: min={:.3}, max={:.3}, mean={:.3}", min, max, mean);
         
         embeddings.push(embedding);
-    }
-
-    // Сравнение семантической близости
-    println!("\nМатрица семантической близости:");
-    println!("     1     2     3     4     5");
-    println!("   -------------------------");
-    
-    for i in 0..test_texts.len() {
-        print!("{} |", i + 1);
-        for j in 0..test_texts.len() {
-            let similarity = E5Model::cosine_similarity(&embeddings[i], &embeddings[j]);
-            print!(" {:.3}", similarity);
-        }
-        println!();
     }
 
     Ok(())

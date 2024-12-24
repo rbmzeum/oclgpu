@@ -678,13 +678,24 @@ fn main() {
         }
 
         // Выполняем CPU вычисления
+        println!("\nЗапуск вычислений на CPU...");
+        let cpu_start_time = std::time::Instant::now();
         cpu_matrix_multiply(&cpu_a, &cpu_b, &mut cpu_c, MATRIX_SIZE);
+        let cpu_duration = cpu_start_time.elapsed();
+        println!("CPU вычисления завершены за {:?}", cpu_duration);
 
         // Сравниваем результаты
         let results_match = compare_results(&c, &cpu_c, MATRIX_SIZE);
 
+        // Вычисляем ускорение
+        let speedup = cpu_duration.as_secs_f64() / gpu_duration.as_secs_f64();
+        let percentage_faster = (speedup - 1.0) * 100.0;
+
         println!("\nИтоговая статистика:");
         println!("Время выполнения на GPU: {:?}", gpu_duration);
+        println!("Время выполнения на CPU: {:?}", cpu_duration);
+        println!("GPU быстрее CPU в {:.2} раз", speedup);
+        println!("GPU быстрее CPU на {:.2}%", percentage_faster);
         println!("Результаты GPU и CPU {}", if results_match { "совпадают" } else { "различаются" });
 
         println!("\nОсвобождение ресурсов OpenCL...");

@@ -162,6 +162,30 @@ impl E5Model {
     }
 }
 
+fn f32_to_hex_string(value: f32) -> String {
+    // Преобразуем f32 в u32, чтобы получить битовое представление
+    let bits = value.to_bits();
+    // Форматируем u32 в шестнадцатеричную строку без префикса "0x"
+    format!("{:08X}", bits)
+}
+
+fn f32_vector_to_hex_string(vector: &[f32]) -> String {
+    vector.iter()
+        .map(|&value| f32_to_hex_string(value))
+        .collect::<String>()
+}
+
+fn print_hex_vector(vector: &[f32]) -> String {
+    let mut hex_string = String::new();
+    
+    for &value in vector.iter() {
+        // Преобразуем значение в шестнадцатеричный формат и добавляем его к строке
+        hex_string.push_str(&format!("{:02x}", (value * 100.0) as u8));
+    }
+    
+    hex_string
+}
+
 fn main() -> Result<()> {
     println!("Инициализация E5 multilingual модели...");
     let model = E5Model::new()?;
@@ -197,6 +221,9 @@ fn main() -> Result<()> {
             }
         }
         println!("]");
+
+        // Компактный вывод вектора
+        print!("Вектор (hex): [{:?}]", &f32_vector_to_hex_string(&embedding));
         
         // Статистика по вектору
         let min = embedding.iter().fold(f32::INFINITY, |a, &b| a.min(b));
